@@ -4,7 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 5000;
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 // Middleware
 app.use(cors());
@@ -59,6 +59,30 @@ async function run() {
       } catch (error) {
         console.error("Error fetching meals:", error);
         res.status(500).send({ error: "Failed to fetch meals" });
+      }
+    });
+
+    // GET: Meal by ID
+    app.get("/meals/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        // Check for valid ObjectId
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ error: "Invalid meal ID" });
+        }
+
+        const query = { _id: new ObjectId(id) };
+        const meal = await mealCollection.findOne(query);
+
+        if (!meal) {
+          return res.status(404).send({ error: "Meal not found" });
+        }
+
+        res.send(meal);
+      } catch (error) {
+        console.error("Error fetching meal by ID:", error);
+        res.status(500).send({ error: "Failed to fetch meal" });
       }
     });
 
