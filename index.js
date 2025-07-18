@@ -26,7 +26,10 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
-    const mealCollection = client.db("MealMateDB").collection("meals");
+    const mealsCollection = client.db("MealMateDB").collection("meals");
+    const mealReviewsCollection = client
+      .db("MealMateDB")
+      .collection("mealReview");
     const mealRequestCollection = client
       .db("MealMateDB")
       .collection("mealRequest");
@@ -35,7 +38,7 @@ async function run() {
     app.post("/meals", async (req, res) => {
       try {
         const meal = req.body; // meal object from frontend
-        const result = await mealCollection.insertOne(meal);
+        const result = await mealsCollection.insertOne(meal);
         res.send(result);
       } catch (error) {
         console.error("Error adding meal:", error);
@@ -53,7 +56,7 @@ async function run() {
             }
           : {};
 
-        const meals = await mealCollection
+        const meals = await mealsCollection
           .find(filter)
           .sort({ postTime: -1 }) // Sort by postTime descending
           .toArray();
@@ -76,7 +79,7 @@ async function run() {
         }
 
         const query = { _id: new ObjectId(id) };
-        const meal = await mealCollection.findOne(query);
+        const meal = await mealsCollection.findOne(query);
 
         if (!meal) {
           return res.status(404).send({ error: "Meal not found" });
@@ -93,7 +96,7 @@ async function run() {
     app.post("/meals/like/:id", async (req, res) => {
       const id = req.params.id;
 
-      const result = await mealCollection.updateOne(
+      const result = await mealsCollection.updateOne(
         { _id: new ObjectId(id) },
         { $inc: { likes: 1 } }
       );
@@ -103,14 +106,40 @@ async function run() {
 
     //post meal request
     app.post("/meal-requests", async (req, res) => {
-      const mealRequest = {
-        ...req.body,
-        status: "pending",
-        requestedAt: new Date(),
-      };
+      const mealRequest = req.body;
 
       const result = await mealRequestCollection.insertOne(mealRequest);
       res.send(result);
+    });
+
+    //meal review post api
+    app.post("/reviews", async (req, res) => {
+      const review = {
+        ...req.body,
+        createdAt: new Date(),
+      };
+
+      const insertResult = await mealReviewsCollection.insertOne(review);
+
+      // Optionally update review count in meals collection
+      await mealsCollection.updateOne(
+        { _id: new ObjectId(review.mealId) },
+        { $inc: { reviews_count: 1 } }
+      );
+
+      res.send(insertResult);
+    });
+
+    //get meals review
+    app.get("/reviews/:mealId", async (req, res) => {
+      const mealId = req.params.mealId;
+
+      const reviews = await mealReviewsCollection
+        .find({ mealId: mealId })
+        .sort({ createdAt: -1 }) // latest first
+        .toArray();
+
+      res.send(reviews);
     });
 
     // Send a ping to confirm a successful connection
