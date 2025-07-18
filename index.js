@@ -86,6 +86,18 @@ async function run() {
       }
     });
 
+    //meal like api
+    app.post("/meals/like/:id", async (req, res) => {
+      const id = req.params.id;
+
+      const result = await mealCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $inc: { likes: 1 } }
+      );
+
+      res.send(result);
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
