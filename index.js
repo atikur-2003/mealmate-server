@@ -27,6 +27,9 @@ async function run() {
     await client.connect();
 
     const mealCollection = client.db("MealMateDB").collection("meals");
+    const mealRequestCollection = client
+      .db("MealMateDB")
+      .collection("mealRequest");
 
     // POST: Add a new meal
     app.post("/meals", async (req, res) => {
@@ -95,6 +98,18 @@ async function run() {
         { $inc: { likes: 1 } }
       );
 
+      res.send(result);
+    });
+
+    //post meal request
+    app.post("/meal-requests", async (req, res) => {
+      const mealRequest = {
+        ...req.body,
+        status: "pending",
+        requestedAt: new Date(),
+      };
+
+      const result = await mealRequestCollection.insertOne(mealRequest);
       res.send(result);
     });
 
