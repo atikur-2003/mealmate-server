@@ -49,24 +49,90 @@ async function run() {
     // GET: All meals or meals by user email (latest first)
     app.get("/meals", async (req, res) => {
       try {
-        const email = req.query.email;
-        const filter = email
-          ? {
-              distributorEmail: email,
-            }
-          : {};
+        const {
+          email,
+          search = "",
+          category = "All",
+          priceRange = "All",
+        } = req.query;
+
+        const filter = {};
+
+        // Filter by email if present
+        if (email) {
+          filter.distributorEmail = email;
+        }
+
+        // Search by title (case-insensitive)
+        if (search) {
+          filter.title = { $regex: search, $options: "i" };
+        }
+
+        // Category filter
+        if (category !== "All") {
+          filter.category = { $regex: `^${category}$`, $options: "i" }; 
+        }
+
+        // Price range filter
+        if (priceRange !== "All") {
+          if (priceRange === "301+") {
+            filter.price = { $gte: 301 };
+          } else {
+            const [min, max] = priceRange.split("-").map(Number);
+            filter.price = { $gte: min, $lte: max };
+          }
+        }
 
         const meals = await mealsCollection
           .find(filter)
-          .sort({ postTime: -1 }) // Sort by postTime descending
+          .sort({ postTime: -1 }) // Use postTime for sorting
           .toArray();
 
         res.send(meals);
-      } catch (error) {
-        console.error("Error fetching meals:", error);
-        res.status(500).send({ error: "Failed to fetch meals" });
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: "Failed to fetch meals" });
       }
     });
+
+    // //get meals with search functionality
+    // app.get("/meals", async (req, res) => {
+    //   try {
+    //     const { search = "", category = "All", priceRange = "All" } = req.query;
+
+    //     const filter = {};
+
+    //     // Search by title (case-insensitive)
+    //     if (search) {
+    //       filter.title = { $regex: search, $options: "i" };
+    //     }
+
+    //     // Category filter
+    //     if (category !== "All") {
+    //       filter.category = category;
+    //     }
+
+    //     // Price range filter
+    //     if (priceRange !== "All") {
+    //       if (priceRange === "301+") {
+    //         filter.price = { $gte: 301 };
+    //       } else {
+    //         const [min, max] = priceRange.split("-").map(Number);
+    //         filter.price = { $gte: min, $lte: max };
+    //       }
+    //     }
+
+    //     const meals = await mealsCollection
+    //       .find(filter)
+    //       .sort({ createdAt: -1 }) // latest first
+    //       .toArray();
+
+    //     res.send(meals);
+    //   } catch (err) {
+    //     console.error(err);
+    //     res.status(500).send({ message: "Failed to fetch meals" });
+    //   }
+    // });
 
     // GET: Meal by ID
     app.get("/meals/:id", async (req, res) => {
