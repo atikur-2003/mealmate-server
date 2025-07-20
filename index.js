@@ -9,7 +9,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 app.use(cors());
 app.use(express.json());
 
-const stripe = require('stripe')(process.env.PAYMENT_GATEWAY_KEY);
+const stripe = require("stripe")(process.env.PAYMENT_GATEWAY_KEY);
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.g93sy5b.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -27,8 +27,12 @@ async function run() {
     await client.connect();
 
     const mealsCollection = client.db("MealMateDB").collection("meals");
-    const mealReviewsCollection = client.db("MealMateDB").collection("mealReview");
-    const mealRequestCollection = client.db("MealMateDB").collection("mealRequest");
+    const mealReviewsCollection = client
+      .db("MealMateDB")
+      .collection("mealReview");
+    const mealRequestCollection = client
+      .db("MealMateDB")
+      .collection("mealRequest");
     const paymentsCollection = client.db("MealMateDB").collection("payments");
 
     // POST: Add a new meal
@@ -148,7 +152,17 @@ async function run() {
       res.send(insertResult);
     });
 
-    //get meals review
+    //get all reviews
+    app.get("/reviews", async (req, res) => {
+      try {
+        const reviews = await mealReviewsCollection.find().toArray();
+        res.send(reviews);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to fetch reviews" });
+      }
+    });
+
+    //get meals review by id
     app.get("/reviews/:mealId", async (req, res) => {
       const mealId = req.params.mealId;
 
@@ -159,7 +173,6 @@ async function run() {
 
       res.send(reviews);
     });
-
 
     // POST create payment intent
     app.post("/create-payment-intent", async (req, res) => {
@@ -173,16 +186,35 @@ async function run() {
     });
 
     // POST save payment and assign badge
-    app.post("/save-payment", async (req, res) => {
-      const { email, package, transactionId, price, date } = req.body;
+    app.post("/payments", async (req, res) => {
+      try {
+        const payment = req.body;
+        payment.date = new Date(); // Add timestamp to record when it was saved
 
-     const result = await paymentsCollection.insertOne(req.body);
+        const result = await paymentsCollection.insertOne(payment);
+        res.send(result);
+      } catch (error) {
+        console.error("Error saving payment:", error);
+        res.status(500).send({ error: "Failed to save payment" });
+      }
+    });
 
-      await db
-        .collection("users")
-        .updateOne({ email }, { $set: { badge: package } }, { upsert: true });
+    // GET: Payments by email
+    app.get("/payments", async (req, res) => {
+      try {
+        const email = req.query.email;
+        const filter = email ? { email } : {};
 
-      res.send({ success: true });
+        const payments = await paymentsCollection
+          .find(filter)
+          .sort({ date: -1 })
+          .toArray();
+
+        res.send(payments);
+      } catch (error) {
+        console.error("Error fetching payments:", error);
+        res.status(500).send({ error: "Failed to fetch payment history" });
+      }
     });
 
     // Send a ping to confirm a successful connection
