@@ -26,14 +26,23 @@ async function run() {
   try {
     await client.connect();
 
-    const mealsCollection = client.db("MealMateDB").collection("meals");
-    const mealReviewsCollection = client
-      .db("MealMateDB")
-      .collection("mealReview");
-    const mealRequestCollection = client
-      .db("MealMateDB")
-      .collection("mealRequest");
-    const paymentsCollection = client.db("MealMateDB").collection("payments");
+    const db = client.db("MealMateDB");
+    const mealsCollection = db.collection("meals");
+    const usersCollection = db.collection("users");
+    const mealReviewsCollection = db.collection("mealReview");
+    const mealRequestCollection = db.collection("mealRequest");
+    const paymentsCollection = db.collection("payments");
+
+    app.post('/users', async(req, res)=>{
+      const email = req.body.email;
+      const userExists = await usersCollection.findOne({email});
+      if(userExists){
+        return res.status(200).send({message: 'user already exists', inserted: false})
+      }
+      const user = req.body;
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    })
 
     // POST: Add a new meal
     app.post("/meals", async (req, res) => {
