@@ -1,14 +1,15 @@
-// server.js
-require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 5000;
+require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 // Middleware
 app.use(cors());
-app.use(express.json()); // to parse JSON body
+app.use(express.json());
+
+const stripe = require('stripe')(process.env.PAYMENT_GATEWAY_KEY);
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.g93sy5b.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -23,16 +24,12 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
     const mealsCollection = client.db("MealMateDB").collection("meals");
-    const mealReviewsCollection = client
-      .db("MealMateDB")
-      .collection("mealReview");
-    const mealRequestCollection = client
-      .db("MealMateDB")
-      .collection("mealRequest");
+    const mealReviewsCollection = client.db("MealMateDB").collection("mealReview");
+    const mealRequestCollection = client.db("MealMateDB").collection("mealRequest");
+    const paymentsCollection = client.db("MealMateDB").collection("payments");
 
     // POST: Add a new meal
     app.post("/meals", async (req, res) => {
@@ -58,22 +55,18 @@ async function run() {
 
         const filter = {};
 
-        // Filter by email if present
         if (email) {
           filter.distributorEmail = email;
         }
 
-        // Search by title (case-insensitive)
         if (search) {
           filter.title = { $regex: search, $options: "i" };
         }
 
-        // Category filter
         if (category !== "All") {
-          filter.category = { $regex: `^${category}$`, $options: "i" }; 
+          filter.category = { $regex: `^${category}$`, $options: "i" };
         }
 
-        // Price range filter
         if (priceRange !== "All") {
           if (priceRange === "301+") {
             filter.price = { $gte: 301 };
@@ -85,7 +78,7 @@ async function run() {
 
         const meals = await mealsCollection
           .find(filter)
-          .sort({ postTime: -1 }) // Use postTime for sorting
+          .sort({ postTime: -1 })
           .toArray();
 
         res.send(meals);
@@ -95,51 +88,11 @@ async function run() {
       }
     });
 
-    // //get meals with search functionality
-    // app.get("/meals", async (req, res) => {
-    //   try {
-    //     const { search = "", category = "All", priceRange = "All" } = req.query;
-
-    //     const filter = {};
-
-    //     // Search by title (case-insensitive)
-    //     if (search) {
-    //       filter.title = { $regex: search, $options: "i" };
-    //     }
-
-    //     // Category filter
-    //     if (category !== "All") {
-    //       filter.category = category;
-    //     }
-
-    //     // Price range filter
-    //     if (priceRange !== "All") {
-    //       if (priceRange === "301+") {
-    //         filter.price = { $gte: 301 };
-    //       } else {
-    //         const [min, max] = priceRange.split("-").map(Number);
-    //         filter.price = { $gte: min, $lte: max };
-    //       }
-    //     }
-
-    //     const meals = await mealsCollection
-    //       .find(filter)
-    //       .sort({ createdAt: -1 }) // latest first
-    //       .toArray();
-
-    //     res.send(meals);
-    //   } catch (err) {
-    //     console.error(err);
-    //     res.status(500).send({ message: "Failed to fetch meals" });
-    //   }
-    // });
-
     // GET: Meal by ID
     app.get("/meals/:id", async (req, res) => {
       try {
         const id = req.params.id;
 
-        // Check for valid ObjectId
         if (!ObjectId.isValid(id)) {
           return res.status(400).send({ error: "Invalid meal ID" });
         }
@@ -187,7 +140,6 @@ async function run() {
 
       const insertResult = await mealReviewsCollection.insertOne(review);
 
-      // Optionally update review count in meals collection
       await mealsCollection.updateOne(
         { _id: new ObjectId(review.mealId) },
         { $inc: { reviews_count: 1 } }
@@ -202,10 +154,35 @@ async function run() {
 
       const reviews = await mealReviewsCollection
         .find({ mealId: mealId })
-        .sort({ createdAt: -1 }) // latest first
+        .sort({ createdAt: -1 })
         .toArray();
 
       res.send(reviews);
+    });
+
+
+    // POST create payment intent
+    app.post("/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: price * 100,
+        currency: "bdt",
+        payment_method_types: ["card"],
+      });
+      res.send({ clientSecret: paymentIntent.client_secret });
+    });
+
+    // POST save payment and assign badge
+    app.post("/save-payment", async (req, res) => {
+      const { email, package, transactionId, price, date } = req.body;
+
+     const result = await paymentsCollection.insertOne(req.body);
+
+      await db
+        .collection("users")
+        .updateOne({ email }, { $set: { badge: package } }, { upsert: true });
+
+      res.send({ success: true });
     });
 
     // Send a ping to confirm a successful connection
