@@ -6,20 +6,17 @@ require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const admin = require("firebase-admin");
 
-const stripe = require("stripe")(process.env.PAYMENT_GATEWAY_KEY);
-
 // Middleware
 app.use(cors());
 app.use(express.json());
 
+const stripe = require("stripe")(process.env.PAYMENT_GATEWAY_KEY);
 
 const serviceAccount = require("./firebase-admin-key.json");
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  credential: admin.credential.cert(serviceAccount),
 });
-
-
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.g93sy5b.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -44,40 +41,53 @@ async function run() {
     const paymentsCollection = db.collection("payments");
 
     //custom middleware
-    const verifyFBToken = async(req, res, next) =>{
+    const verifyFBToken = async (req, res, next) => {
       const authHeader = req.header.authorization;
-      if(!authHeader){
-        return res.status(401).send({message:'unauthorized access'})
+      if (!authHeader) {
+        return res.status(401).send({ message: "unauthorized access" });
       }
-      const token = authHeader.split('')[1];
-      if(!token){
-        return res.status(401).send({message:'unauthorized access'})
+      const token = authHeader.split(" ")[1];
+      if (!token) {
+        return res.status(401).send({ message: "unauthorized access" });
       }
 
       //verify token
-      try{
+      try {
         const decoded = await admin.auth().verifyIdToken(token);
         req.decoded(decoded);
         next();
+      } catch (error) {
+        return res.status(403).send({ message: "forbidden access" });
       }
-      catch(error){
-        return res.status(403).send({message:'forbidden access'})
-      }
-
-      
-    }
+    };
 
     //user post api
-    app.post('/users', async(req, res)=>{
+    app.post("/users", async (req, res) => {
       const email = req.body.email;
-      const userExists = await usersCollection.findOne({email});
-      if(userExists){
-        return res.status(200).send({message: 'user already exists', inserted: false})
+      const userExists = await usersCollection.findOne({ email });
+      if (userExists) {
+        return res
+          .status(200)
+          .send({ message: "user already exists", inserted: false });
       }
       const user = req.body;
       const result = await usersCollection.insertOne(user);
       res.send(result);
-    })
+    });
+
+    // GET /users/role/:email
+    app.get("/users/role/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = await usersCollection.findOne({
+        email: { $regex: `^${email}$`, $options: "i" },
+      });
+
+      if (!user) {
+        return res.status(404).send({ role: null });
+      }
+
+      res.send({ role: user.role }); // Should be "admin"
+    });
 
     // POST: Add a new meal
     app.post("/meals", async (req, res) => {
@@ -92,7 +102,7 @@ async function run() {
     });
 
     // GET: All meals or meals by user email (latest first)
-    app.get("/meals",verifyFBToken, async (req, res) => {
+    app.get("/meals", async (req, res) => {
       try {
         const {
           email,
@@ -179,6 +189,24 @@ async function run() {
       res.send(result);
     });
 
+    // Get meals requested by email
+    app.get("/requested-meals", async (req, res) => {
+      const email = req.query.email;
+      const result = await mealRequestCollection
+        .find({ requestedBy: email })
+        .toArray();
+      res.send(result);
+    });
+
+    // Delete requested meal
+    app.delete("/requested-meals/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await mealRequestCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+      res.send(result);
+    });
+
     //meal review post api
     app.post("/reviews", async (req, res) => {
       const review = {
@@ -216,6 +244,15 @@ async function run() {
         .toArray();
 
       res.send(reviews);
+    });
+
+    // Get reviews by user email
+    app.get("/reviews", async (req, res) => {
+      const email = req.query.email;
+      const result = await mealReviewsCollection
+        .find({ reviewerEmail: email })
+        .toArray();
+      res.send(result);
     });
 
     // POST create payment intent
