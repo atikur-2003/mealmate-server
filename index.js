@@ -89,6 +89,49 @@ async function run() {
       res.send({ role: user.role }); // Should be "admin"
     });
 
+    const userCollection = client.db("hostelManagement").collection("users");
+
+    // GET: Search user by email
+    app.get("/users/search", async (req, res) => {
+      const email = req.query.email;
+      if (!email)
+        return res.status(400).send({ error: "Email query is required" });
+
+      const regex = new RegExp(email, "i");
+
+      try {
+        const users = await usersCollection
+          .find({ email: { $regex: regex } })
+          .project({ email: 1, createdAt: 1, role: 1 })
+          .limit(10)
+          .toArray();
+
+        res.send(users);
+      } catch (error) {
+        console.error("Error searching user:", error);
+        res.status(500).send({ error: "Failed to search user" });
+      }
+    });
+
+    // PATCH: Make or remove user an admin
+    app.patch("/users/:id/role", async (req, res) => {
+      const { id } = req.params;
+      const { role } = req.body;
+      if (!["admin", "user"].includes(role)) {
+        return res.status(400).send({ message: "Invalid role" });
+      }
+      try {
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { role } }
+        );
+        res.send({ message: `User role updated to ${role}`, result });
+      } catch (error) {
+        console.error("Error updating user role", error);
+        res.status(500).send({ message: "Failed to update user role" });
+      }
+    });
+
     // POST: Add a new meal
     app.post("/meals", async (req, res) => {
       try {
@@ -166,6 +209,44 @@ async function run() {
       } catch (error) {
         console.error("Error fetching meal by ID:", error);
         res.status(500).send({ error: "Failed to fetch meal" });
+      }
+    });
+
+    //get upcoming meal
+    app.get("/upcoming-meals", async (req, res) => {
+      try {
+        const now = new Date();
+
+        const upcomingMeals = await mealsCollection
+          .find({ postTime: { $gt: now.toISOString() } })
+          .sort({ postTime: 1 })
+          .toArray();
+
+        res.send(upcomingMeals);
+      } catch (err) {
+        console.error("Error fetching upcoming meals:", err);
+        res.status(500).send({ error: "Failed to fetch upcoming meals" });
+      }
+    });
+
+    //upcoming meal like
+    app.patch("/meals/:id/like", async (req, res) => {
+      const { id } = req.params;
+
+      try {
+        const result = await mealsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $inc: { likes: 1 } }
+        );
+
+        if (result.modifiedCount === 0) {
+          return res.status(404).send({ message: "Meal not found" });
+        }
+
+        res.send({ message: "Meal liked successfully", result });
+      } catch (error) {
+        console.error("Error liking meal:", error);
+        res.status(500).send({ message: "Internal Server Error" });
       }
     });
 
