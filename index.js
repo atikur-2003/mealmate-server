@@ -12,7 +12,8 @@ app.use(express.json());
 
 const stripe = require("stripe")(process.env.PAYMENT_GATEWAY_KEY);
 
-const serviceAccount = require("./firebase-admin-key.json");
+const decodedKey = Buffer.from(process.env.FB_ADMIN_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decodedKey);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -31,7 +32,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const db = client.db("MealMateDB");
     const mealsCollection = db.collection("meals");
@@ -98,8 +99,6 @@ async function run() {
 
       res.send({ role: user.role });
     });
-
-    const userCollection = client.db("hostelManagement").collection("users");
 
     // GET: Search user by email
     app.get("/users/search", async (req, res) => {
@@ -223,7 +222,7 @@ async function run() {
     });
 
     //get upcoming meal
-    app.get("/upcoming-meals", async (req, res) => {
+    app.get("/upcoming-meals",verifyFBToken, verifyAdmin, async (req, res) => {
       try {
         const now = new Date();
 
@@ -281,7 +280,7 @@ async function run() {
     });
 
     // Get meals requested by email
-    app.get("/requested-meals", async (req, res) => {
+    app.get("/requested-meals",verifyFBToken, async (req, res) => {
       const { email, search } = req.query;
 
       const query = {};
@@ -413,7 +412,7 @@ async function run() {
     });
 
     // GET: Payments by email
-    app.get("/payments", async (req, res) => {
+    app.get("/payments",verifyFBToken, async (req, res) => {
       try {
         const email = req.query.email;
         const filter = email ? { email } : {};
@@ -431,10 +430,10 @@ async function run() {
     });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
