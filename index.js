@@ -42,11 +42,11 @@ async function run() {
 
     //custom middleware
     const verifyFBToken = async (req, res, next) => {
-      const authHeader = req.header.authorization;
+      const authHeader = req.headers.authorization;
       if (!authHeader) {
         return res.status(401).send({ message: "unauthorized access" });
       }
-      const token = authHeader.split(" ")[1];
+      const token = authHeader.split(' ')[1];
       if (!token) {
         return res.status(401).send({ message: "unauthorized access" });
       }
@@ -54,12 +54,22 @@ async function run() {
       //verify token
       try {
         const decoded = await admin.auth().verifyIdToken(token);
-        req.decoded(decoded);
+        req.decoded = decoded;
         next();
       } catch (error) {
         return res.status(403).send({ message: "forbidden access" });
       }
     };
+
+    const verifyAdmin = async(req, res, next)=>{
+      const email = req.decoded.email;
+      const query = {email};
+      const user = await usersCollection.findOne(query);
+      if(!user || user.role !=='admin'){
+        return res.status(403).send({message: "forbidden access"})
+      }
+      next();
+    }
 
     //user post api
     app.post("/users", async (req, res) => {
@@ -86,7 +96,7 @@ async function run() {
         return res.status(404).send({ role: null });
       }
 
-      res.send({ role: user.role }); // Should be "admin"
+      res.send({ role: user.role });
     });
 
     const userCollection = client.db("hostelManagement").collection("users");
@@ -114,7 +124,7 @@ async function run() {
     });
 
     // PATCH: Make or remove user an admin
-    app.patch("/users/:id/role", async (req, res) => {
+    app.patch("/users/:id/role",verifyFBToken, verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const { role } = req.body;
       if (!["admin", "user"].includes(role)) {
@@ -145,7 +155,7 @@ async function run() {
     });
 
     // GET: All meals or meals by user email (latest first)
-    app.get("/meals", async (req, res) => {
+    app.get("/meals", verifyFBToken, async (req, res) => {
       try {
         const {
           email,
@@ -272,11 +282,52 @@ async function run() {
 
     // Get meals requested by email
     app.get("/requested-meals", async (req, res) => {
-      const email = req.query.email;
-      const result = await mealRequestCollection
-        .find({ requestedBy: email })
-        .toArray();
-      res.send(result);
+      const { email, search } = req.query;
+
+      const query = {};
+
+      if (email) {
+        query.requestedBy = email;
+      }
+
+      if (search) {
+        query.$or = [
+          { userEmail: { $regex: search, $options: "i" } },
+          { userName: { $regex: search, $options: "i" } },
+        ];
+      }
+
+      try {
+        const meals = await mealRequestCollection.find(query).toArray();
+        res.send(meals);
+      } catch (error) {
+        console.error("Error fetching requested meals:", error);
+        res.status(500).send({ error: "Failed to fetch requested meals" });
+      }
+    });
+
+    //serve meal
+    app.patch("/requested-meals/:id", async (req, res) => {
+      const { id } = req.params;
+
+      try {
+        const result = await mealRequestCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status: "delivered" } }
+        );
+
+        if (result.modifiedCount === 1) {
+          res.send({
+            message: "Meal status updated to 'served'",
+            success: true,
+          });
+        } else {
+          res.status(404).send({ message: "Meal not found or already served" });
+        }
+      } catch (error) {
+        console.error("Error updating meal status:", error);
+        res.status(500).send({ error: "Failed to serve meal" });
+      }
     });
 
     // Delete requested meal
