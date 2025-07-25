@@ -87,7 +87,7 @@ async function run() {
     });
 
     // GET /users/role/:email
-    app.get("/users/role/:email", async (req, res) => {
+    app.get("/users/role/:email",verifyFBToken, verifyAdmin, async (req, res) => {
       const email = req.params.email;
       const user = await usersCollection.findOne({
         email: { $regex: `^${email}$`, $options: "i" },
@@ -101,7 +101,7 @@ async function run() {
     });
 
     // GET: Search user by email
-    app.get("/users/search", async (req, res) => {
+    app.get("/users/search",verifyFBToken, async (req, res) => {
       const email = req.query.email;
       if (!email)
         return res.status(400).send({ error: "Email query is required" });
@@ -199,7 +199,7 @@ async function run() {
     });
 
     // GET: Meal by ID
-    app.get("/meals/:id", async (req, res) => {
+    app.get("/meals/:id", verifyFBToken, async (req, res) => {
       try {
         const id = req.params.id;
 
@@ -222,7 +222,7 @@ async function run() {
     });
 
     //get upcoming meal
-    app.get("/upcoming-meals",verifyFBToken, verifyAdmin, async (req, res) => {
+    app.get("/upcoming-meals", verifyFBToken, async (req, res) => {
       try {
         const now = new Date();
 
@@ -306,7 +306,7 @@ async function run() {
     });
 
     //serve meal
-    app.patch("/requested-meals/:id", async (req, res) => {
+    app.patch("/requested-meals/:id",verifyFBToken, async (req, res) => {
       const { id } = req.params;
 
       try {
