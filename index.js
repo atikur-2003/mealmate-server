@@ -12,7 +12,9 @@ app.use(express.json());
 
 const stripe = require("stripe")(process.env.PAYMENT_GATEWAY_KEY);
 
-const decodedKey = Buffer.from(process.env.FB_ADMIN_KEY, 'base64').toString('utf8')
+const decodedKey = Buffer.from(process.env.FB_ADMIN_KEY, "base64").toString(
+  "utf8"
+);
 const serviceAccount = JSON.parse(decodedKey);
 
 admin.initializeApp({
@@ -47,7 +49,7 @@ async function run() {
       if (!authHeader) {
         return res.status(401).send({ message: "unauthorized access" });
       }
-      const token = authHeader.split(' ')[1];
+      const token = authHeader.split(" ")[1];
       if (!token) {
         return res.status(401).send({ message: "unauthorized access" });
       }
@@ -62,15 +64,38 @@ async function run() {
       }
     };
 
-    const verifyAdmin = async(req, res, next)=>{
+    const verifyAdmin = async (req, res, next) => {
       const email = req.decoded.email;
-      const query = {email};
+      const query = { email };
       const user = await usersCollection.findOne(query);
-      if(!user || user.role !=='admin'){
-        return res.status(403).send({message: "forbidden access"})
+      if (!user || user.role !== "admin") {
+        return res.status(403).send({ message: "forbidden access" });
       }
       next();
-    }
+    };
+
+    // Get admin stats
+    app.get("/admin/stats", async (req, res) => {
+      try {
+        const totalUsers = await usersCollection.countDocuments();
+        const totalMeals = await mealsCollection.countDocuments();
+        const activeRequests = await mealRequestCollection.countDocuments({
+          status: "pending",
+        });
+        const totalRevenue = await paymentsCollection
+          .aggregate([{ $group: { _id: null, revenue: { $sum: "$price" } } }])
+          .toArray();
+
+        res.send({
+          totalUsers,
+          totalMeals,
+          activeRequests,
+          totalRevenue: totalRevenue[0]?.revenue || 0,
+        });
+      } catch (err) {
+        res.status(500).send({ error: err.message });
+      }
+    });
 
     //user post api
     app.post("/users", async (req, res) => {
@@ -87,21 +112,26 @@ async function run() {
     });
 
     // GET /users/role/:email
-    app.get("/users/role/:email",verifyFBToken, verifyAdmin, async (req, res) => {
-      const email = req.params.email;
-      const user = await usersCollection.findOne({
-        email: { $regex: `^${email}$`, $options: "i" },
-      });
+    app.get(
+      "/users/role/:email",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        const email = req.params.email;
+        const user = await usersCollection.findOne({
+          email: { $regex: `^${email}$`, $options: "i" },
+        });
 
-      if (!user) {
-        return res.status(404).send({ role: null });
+        if (!user) {
+          return res.status(404).send({ role: null });
+        }
+
+        res.send({ role: user.role });
       }
-
-      res.send({ role: user.role });
-    });
+    );
 
     // GET: Search user by email
-    app.get("/users/search",verifyFBToken, async (req, res) => {
+    app.get("/users/search", verifyFBToken, async (req, res) => {
       const email = req.query.email;
       if (!email)
         return res.status(400).send({ error: "Email query is required" });
@@ -123,28 +153,33 @@ async function run() {
     });
 
     // PATCH: Make or remove user an admin
-    app.patch("/users/:id/role",verifyFBToken, verifyAdmin, async (req, res) => {
-      const { id } = req.params;
-      const { role } = req.body;
-      if (!["admin", "user"].includes(role)) {
-        return res.status(400).send({ message: "Invalid role" });
+    app.patch(
+      "/users/:id/role",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
+        const { role } = req.body;
+        if (!["admin", "user"].includes(role)) {
+          return res.status(400).send({ message: "Invalid role" });
+        }
+        try {
+          const result = await usersCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { role } }
+          );
+          res.send({ message: `User role updated to ${role}`, result });
+        } catch (error) {
+          console.error("Error updating user role", error);
+          res.status(500).send({ message: "Failed to update user role" });
+        }
       }
-      try {
-        const result = await usersCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { role } }
-        );
-        res.send({ message: `User role updated to ${role}`, result });
-      } catch (error) {
-        console.error("Error updating user role", error);
-        res.status(500).send({ message: "Failed to update user role" });
-      }
-    });
+    );
 
     // POST: Add a new meal
     app.post("/meals", async (req, res) => {
       try {
-        const meal = req.body; // meal object from frontend
+        const meal = req.body;
         const result = await mealsCollection.insertOne(meal);
         res.send(result);
       } catch (error) {
@@ -154,7 +189,7 @@ async function run() {
     });
 
     // GET: All meals or meals by user email (latest first)
-    app.get("/meals", verifyFBToken, async (req, res) => {
+    app.get("/meals", async (req, res) => {
       try {
         const {
           email,
@@ -280,7 +315,7 @@ async function run() {
     });
 
     // Get meals requested by email
-    app.get("/requested-meals",verifyFBToken, async (req, res) => {
+    app.get("/requested-meals", verifyFBToken, async (req, res) => {
       const { email, search } = req.query;
 
       const query = {};
@@ -306,7 +341,7 @@ async function run() {
     });
 
     //serve meal
-    app.patch("/requested-meals/:id",verifyFBToken, async (req, res) => {
+    app.patch("/requested-meals/:id", verifyFBToken, async (req, res) => {
       const { id } = req.params;
 
       try {
@@ -412,7 +447,7 @@ async function run() {
     });
 
     // GET: Payments by email
-    app.get("/payments",verifyFBToken, async (req, res) => {
+    app.get("/payments", verifyFBToken, async (req, res) => {
       try {
         const email = req.query.email;
         const filter = email ? { email } : {};
