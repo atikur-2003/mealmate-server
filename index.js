@@ -77,6 +77,9 @@ async function run() {
     // Get admin stats
     app.get("/admin/stats", async (req, res) => {
       try {
+        const totalUsers = await usersCollection.estimatedDocumentCount();
+
+        const totalMeals = await mealsCollection.estimatedDocumentCount();
         const activeRequests = await mealRequestCollection.countDocuments({
           status: "pending",
         });
