@@ -77,8 +77,6 @@ async function run() {
     // Get admin stats
     app.get("/admin/stats", async (req, res) => {
       try {
-        const totalUsers = await usersCollection.countDocuments();
-        const totalMeals = await mealsCollection.countDocuments();
         const activeRequests = await mealRequestCollection.countDocuments({
           status: "pending",
         });
@@ -131,25 +129,29 @@ async function run() {
     );
 
     // GET: Search user by email
-    app.get("/users/search", verifyFBToken, async (req, res) => {
-      const email = req.query.email;
-      if (!email)
-        return res.status(400).send({ error: "Email query is required" });
+    // app.get("/users/search", verifyFBToken, async (req, res) => {
+    //   const email = req.query.email;
+    //   if (!email)
+    //     return res.status(400).send({ error: "Email query is required" });
 
-      const regex = new RegExp(email, "i");
+    //   const regex = new RegExp(email, "i");
 
-      try {
-        const users = await usersCollection
-          .find({ email: { $regex: regex } })
-          .project({ email: 1, createdAt: 1, role: 1 })
-          .limit(10)
-          .toArray();
+    //   try {
+    //     const users = await usersCollection
+    //       .find({ email: { $regex: regex } })
+    //       .project({ email: 1, createdAt: 1, role: 1 })
+    //       .limit(10)
+    //       .toArray();
 
-        res.send(users);
-      } catch (error) {
-        console.error("Error searching user:", error);
-        res.status(500).send({ error: "Failed to search user" });
-      }
+    //     res.send(users);
+    //   } catch (error) {
+    //     console.error("Error searching user:", error);
+    //     res.status(500).send({ error: "Failed to search user" });
+    //   }
+    // });
+    app.get("/users", async (req, res) => {
+      const result = await usersCollection.find().toArray();
+      res.send(result);
     });
 
     // PATCH: Make or remove user an admin
@@ -254,6 +256,25 @@ async function run() {
         console.error("Error fetching meal by ID:", error);
         res.status(500).send({ error: "Failed to fetch meal" });
       }
+    });
+
+    // api for meal update
+    app.put("/meals/:id", async (req, res) => {
+      const id = req.params.id;
+      const updatedMeal = req.body;
+
+      const result = await mealsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            mealName: updatedMeal.mealName,
+            price: updatedMeal.price,
+            description: updatedMeal.description,
+          },
+        }
+      );
+
+      res.send(result);
     });
 
     //get upcoming meal
