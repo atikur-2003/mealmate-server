@@ -343,12 +343,8 @@ async function run() {
           { _id: new ObjectId(id) },
           { $inc: { likes: 1 } }
         );
-
-        if (result.modifiedCount === 0) {
-          return res.status(404).send({ message: "Meal not found" });
-        }
-
-        res.send({ message: "Meal liked successfully", result });
+        res.send(result);
+        // res.send({ message: "Meal liked successfully", result });
       } catch (error) {
         console.error("Error liking meal:", error);
         res.status(500).send({ message: "Internal Server Error" });
