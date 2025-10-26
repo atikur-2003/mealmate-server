@@ -193,6 +193,23 @@ async function run() {
       }
     });
 
+    app.put("/meals/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const updatedMeal = req.body;
+
+        const result = await mealsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updatedMeal }
+        );
+
+        res.send(result);
+      } catch (err) {
+        console.error("Error updating meal:", err);
+        res.status(500).send({ error: err.message });
+      }
+    });
+
     // GET: All meals or meals by user email (latest first)
     app.get("/meals", async (req, res) => {
       try {
@@ -263,21 +280,41 @@ async function run() {
 
     // api for meal update
     app.put("/meals/:id", async (req, res) => {
-      const id = req.params.id;
-      const updatedMeal = req.body;
+      try {
+        const id = req.params.id;
+        const updatedMeal = req.body;
 
-      const result = await mealsCollection.updateOne(
-        { _id: new ObjectId(id) },
-        {
-          $set: {
-            mealName: updatedMeal.mealName,
-            price: updatedMeal.price,
-            description: updatedMeal.description,
-          },
+        const result = await mealsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updatedMeal }
+        );
+
+        res.send(result);
+      } catch (err) {
+        console.error("Error updating meal:", err);
+        res.status(500).send({ error: err.message });
+      }
+    });
+
+    // meal delete api
+    app.delete("/meals/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ message: "Invalid meal ID" });
         }
-      );
 
-      res.send(result);
+        const query = { _id: new ObjectId(id) };
+        const result = await mealsCollection.deleteOne(query);
+
+        res.send(result);
+      } catch (err) {
+        console.error("Delete meal error:", err);
+        res
+          .status(500)
+          .send({ message: "Internal Server Error", error: err.message });
+      }
     });
 
     //get upcoming meal
