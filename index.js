@@ -3,8 +3,8 @@ const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 5000;
 require("dotenv").config();
-const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const admin = require("firebase-admin");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 // Middleware
 app.use(cors());
@@ -152,6 +152,8 @@ async function run() {
     //     res.status(500).send({ error: "Failed to search user" });
     //   }
     // });
+
+    // get all users
     app.get("/users", async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
@@ -190,23 +192,6 @@ async function run() {
       } catch (error) {
         console.error("Error adding meal:", error);
         res.status(500).send({ error: "Failed to add meal" });
-      }
-    });
-
-    app.put("/meals/:id", async (req, res) => {
-      try {
-        const id = req.params.id;
-        const updatedMeal = req.body;
-
-        const result = await mealsCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: updatedMeal }
-        );
-
-        res.send(result);
-      } catch (err) {
-        console.error("Error updating meal:", err);
-        res.status(500).send({ error: err.message });
       }
     });
 
@@ -334,23 +319,6 @@ async function run() {
       }
     });
 
-    //upcoming meal like
-    app.patch("/meals/:id/like", async (req, res) => {
-      const { id } = req.params;
-
-      try {
-        const result = await mealsCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $inc: { likes: 1 } }
-        );
-        res.send(result);
-        // res.send({ message: "Meal liked successfully", result });
-      } catch (error) {
-        console.error("Error liking meal:", error);
-        res.status(500).send({ message: "Internal Server Error" });
-      }
-    });
-
     //meal like api
     app.post("/meals/like/:id", async (req, res) => {
       const id = req.params.id;
@@ -472,10 +440,48 @@ async function run() {
     // Get reviews by user email
     app.get("/reviews", async (req, res) => {
       const email = req.query.email;
-      const result = await mealReviewsCollection
-        .find({ reviewerEmail: email })
-        .toArray();
-      res.send(result);
+      const filter = email ? { reviewerEmail: email } : {};
+
+      
+      try {
+        const result = await mealReviewsCollection
+          .find(filter)
+          .sort({ createdAt: 1 })
+          .toArray();
+
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching reviews:", error);
+        res.status(500).send({ message: "Failed to fetch reviews" });
+      }
+    });
+
+    // delete a review
+    app.delete("/reviews/:id", async (req, res) => {
+      const reviewId = req.params.id;
+
+      try {
+        // Validate ObjectId
+        if (!ObjectId.isValid(reviewId)) {
+          return res.status(400).send({ message: "Invalid review ID" });
+        }
+
+        const result = await mealReviewsCollection.deleteOne({
+          _id: new ObjectId(reviewId),
+        });
+
+        if (result.deletedCount === 0) {
+          return res.status(404).send({ message: "Review not found" });
+        }
+
+        res.send({
+          message: "Review deleted successfully",
+          deletedCount: result.deletedCount,
+        });
+      } catch (error) {
+        console.error("Error deleting review:", error);
+        res.status(500).send({ message: "Failed to delete review" });
+      }
     });
 
     // POST create payment intent
