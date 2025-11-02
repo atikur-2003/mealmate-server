@@ -303,7 +303,7 @@ async function run() {
     });
 
     //get upcoming meal
-    app.get("/upcoming-meals", verifyFBToken, async (req, res) => {
+    app.get("/upcoming-meals", async (req, res) => {
       try {
         const now = new Date();
 
